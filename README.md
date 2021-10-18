@@ -62,10 +62,10 @@ hello how are you
 Now, having this two key values then you can implement it:
 
 ```typescript
-const multipart = require('parse-multipart');
+const multipart = require('parse-multipart-data');
 const body = "..the multipart raw body..";
 const boundary = "----WebKitFormBoundaryDtbT5UpPj83kllfw";
-const parts = multipart.Parse(body,boundary);
+const parts = multipart.parse(body,boundary);
 
 for (let i = 0; i < parts.length; i++) {
   const part = parts[i];
