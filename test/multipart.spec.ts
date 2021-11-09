@@ -42,6 +42,22 @@ describe('Multipart', function() {
     expect(boundary).to.be.equal('----WebKitFormBoundaryvm5A9tzU1ONaGP5B')
   })
 
+  it('should get boundary in single quotes', function() {
+    const header =
+      'multipart/form-data; boundary="----WebKitFormBoundaryvm5A9tzU1ONaGP5B"'
+    const boundary = getBoundary(header)
+
+    expect(boundary).to.be.equal('----WebKitFormBoundaryvm5A9tzU1ONaGP5B')
+  })
+  
+  it('should get boundary in double quotes', function() {
+    const header =
+      "multipart/form-data; boundary='----WebKitFormBoundaryvm5A9tzU1ONaGP5B'"
+    const boundary = getBoundary(header)
+
+    expect(boundary).to.be.equal('----WebKitFormBoundaryvm5A9tzU1ONaGP5B')
+  })
+  
   it('should not parse multipart if boundary is not correct', function() {
     const { body, boundary } = DemoData()
     const parts = parse(body, boundary + 'bad')
