@@ -6,11 +6,13 @@ const expect = chai.expect
 
 const expected = [
   {
+    name: 'uploads[]',
     filename: 'A.txt',
     type: 'text/plain',
     data: Buffer.from('@11X111Y\r\n111Z\rCCCC\nCCCC\r\nCCCCC@\r\n')
   },
   {
+    name: 'uploads[]',
     filename: 'B.txt',
     type: 'text/plain',
     data: Buffer.from('@22X222Y\r\n222Z\r222W\n2220\r\n666@')
