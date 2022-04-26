@@ -74,3 +74,4 @@ for (let i = 0; i < parts.length; i++) {
 ```
 
 The returned data is a `part` array with properties: `filename`, `type` and `data`. `data` is type of [Buffer](https://nodejs.org/api/buffer.html).
+
