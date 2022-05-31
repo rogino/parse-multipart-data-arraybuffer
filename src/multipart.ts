@@ -12,8 +12,8 @@
  */
 
 type Part = {
-  header: string
-  info: string
+  contentDispositionHeader: string
+  contentTypeHeader: string
   part: number[]
 }
 
@@ -24,63 +24,83 @@ type Input = {
   data: Buffer
 }
 
+enum ParsingState {
+  INIT,
+  READING_HEADERS,
+  READING_DATA,
+  READING_PART_SEPARATOR,
+}
+
 export function parse(multipartBodyBuffer: Buffer, boundary: string): Input[] {
   let lastline = ''
-  let header = ''
-  let info = ''
-  let state = 0
+  let contentDispositionHeader = ''
+  let contentTypeHeader = ''
+  let state: ParsingState = ParsingState.INIT
   let buffer: number[] = []
   const allParts: Input[] = []
+
+  let currentPartHeaders: string[] = []
 
   for (let i = 0; i < multipartBodyBuffer.length; i++) {
     const oneByte: number = multipartBodyBuffer[i]
     const prevByte: number | null = i > 0 ? multipartBodyBuffer[i - 1] : null
-    const newLineDetected: boolean =
-      oneByte === 0x0a && prevByte === 0x0d ? true : false
-    const newLineChar: boolean =
-      oneByte === 0x0a || oneByte === 0x0d ? true : false
+    // 0x0a => \n
+    // 0x0d => \r
+    const newLineDetected: boolean = oneByte === 0x0a && prevByte === 0x0d
+    const newLineChar: boolean = oneByte === 0x0a || oneByte === 0x0d
 
     if (!newLineChar) lastline += String.fromCharCode(oneByte)
-
-    if (0 === state && newLineDetected) {
+    if (ParsingState.INIT === state && newLineDetected) {
+      // searching for boundary
       if ('--' + boundary === lastline) {
-        state = 1
+        state = ParsingState.READING_HEADERS // found boundary. start reading headers
       }
       lastline = ''
-    } else if (1 === state && newLineDetected) {
-      header = lastline
-      state = 2
-      if (header.indexOf('filename') === -1) {
-        state = 3
+    } else if (ParsingState.READING_HEADERS === state && newLineDetected) {
+      // parsing headers. Headers are separated by an empty line from the content. Stop reading headers when the line is empty
+      if (lastline.length) {
+        currentPartHeaders.push(lastline)
+      } else {
+        // found empty line. search for the headers we want and set the values
+        for (const h of currentPartHeaders) {
+          if (h.toLowerCase().startsWith('content-disposition:')) {
+            contentDispositionHeader = h
+          } else if (h.toLowerCase().startsWith('content-type:')) {
+            contentTypeHeader = h
+          }
+        }
+        state = ParsingState.READING_DATA
+        buffer = []
       }
       lastline = ''
-    } else if (2 === state && newLineDetected) {
-      info = lastline
-      state = 3
-      lastline = ''
-    } else if (3 === state && newLineDetected) {
-      state = 4
-      buffer = []
-      lastline = ''
-    } else if (4 === state) {
-      if (lastline.length > boundary.length + 4) lastline = '' // mem save
+    } else if (ParsingState.READING_DATA === state) {
+      // parsing data
+      if (lastline.length > boundary.length + 4) {
+        lastline = '' // mem save
+      }
       if ('--' + boundary === lastline) {
         const j = buffer.length - lastline.length
         const part = buffer.slice(0, j - 1)
-        const p: Part = { header: header, info: info, part: part }
 
-        allParts.push(process(p))
+        allParts.push(
+          process({ contentDispositionHeader, contentTypeHeader, part })
+        )
         buffer = []
+        currentPartHeaders = []
         lastline = ''
-        state = 5
-        header = ''
-        info = ''
+        state = ParsingState.READING_PART_SEPARATOR
+        contentDispositionHeader = ''
+        contentTypeHeader = ''
       } else {
         buffer.push(oneByte)
       }
-      if (newLineDetected) lastline = ''
-    } else if (5 === state) {
-      if (newLineDetected) state = 1
+      if (newLineDetected) {
+        lastline = ''
+      }
+    } else if (ParsingState.READING_PART_SEPARATOR === state) {
+      if (newLineDetected) {
+        state = ParsingState.READING_HEADERS
+      }
     }
   }
   return allParts
@@ -96,7 +116,7 @@ export function getBoundary(header: string): string {
       const item = new String(items[i]).trim()
       if (item.indexOf('boundary') >= 0) {
         const k = item.split('=')
-        return new String(k[1]).trim().replace(/^["']|["']$/g, "")
+        return new String(k[1]).trim().replace(/^["']|["']$/g, '')
       }
     }
   }
@@ -106,17 +126,17 @@ export function getBoundary(header: string): string {
 export function DemoData(): { body: Buffer; boundary: string } {
   let body = 'trash1\r\n'
   body += '------WebKitFormBoundaryvef1fLxmoUdYZWXp\r\n'
+  body += 'Content-Type: text/plain\r\n'
   body +=
     'Content-Disposition: form-data; name="uploads[]"; filename="A.txt"\r\n'
-  body += 'Content-Type: text/plain\r\n'
   body += '\r\n'
   body += '@11X'
   body += '111Y\r\n'
   body += '111Z\rCCCC\nCCCC\r\nCCCCC@\r\n\r\n'
   body += '------WebKitFormBoundaryvef1fLxmoUdYZWXp\r\n'
+  body += 'Content-Type: text/plain\r\n'
   body +=
     'Content-Disposition: form-data; name="uploads[]"; filename="B.txt"\r\n'
-  body += 'Content-Type: text/plain\r\n'
   body += '\r\n'
   body += '@22X'
   body += '222Y\r\n'
@@ -128,7 +148,7 @@ export function DemoData(): { body: Buffer; boundary: string } {
   body += '------WebKitFormBoundaryvef1fLxmoUdYZWXp--\r\n'
   return {
     body: Buffer.from(body),
-    boundary: '----WebKitFormBoundaryvef1fLxmoUdYZWXp'
+    boundary: '----WebKitFormBoundaryvef1fLxmoUdYZWXp',
   }
 }
 
@@ -139,7 +159,7 @@ function process(part: Part): Input {
   // part: 'AAAABBBB' }
   // into this one:
   // { filename: 'A.txt', type: 'text/plain', data: <Buffer 41 41 41 41 42 42 42 42> }
-  const obj = function(str: string) {
+  const obj = function (str: string) {
     const k = str.split('=')
     const a = k[0].trim()
 
@@ -149,37 +169,37 @@ function process(part: Part): Input {
       value: b,
       writable: true,
       enumerable: true,
-      configurable: true
+      configurable: true,
     })
     return o
   }
-  const header = part.header.split(';')
+  const header = part.contentDispositionHeader.split(';')
 
   const filenameData = header[2]
   let input = {}
   if (filenameData) {
     input = obj(filenameData)
-    const contentType = part.info.split(':')[1].trim()
+    const contentType = part.contentTypeHeader.split(':')[1].trim()
     Object.defineProperty(input, 'type', {
       value: contentType,
       writable: true,
       enumerable: true,
       configurable: true
     })
-  } 
-  // always process the name field 
+  }
+  // always process the name field
   Object.defineProperty(input, 'name', {
     value: header[1].split('=')[1].replace(/"/g, ''),
     writable: true,
     enumerable: true,
     configurable: true
   })
-  
+
   Object.defineProperty(input, 'data', {
     value: Buffer.from(part.part),
     writable: true,
     enumerable: true,
-    configurable: true
+    configurable: true,
   })
   return input as Input
 }
