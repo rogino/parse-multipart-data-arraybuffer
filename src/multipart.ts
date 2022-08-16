@@ -166,15 +166,15 @@ function process(part: Part): Input {
       enumerable: true,
       configurable: true
     })
-  } else {
-    Object.defineProperty(input, 'name', {
-      value: header[1].split('=')[1].replace(/"/g, ''),
-      writable: true,
-      enumerable: true,
-      configurable: true
-    })
-  }
-
+  } 
+  // always process the name field 
+  Object.defineProperty(input, 'name', {
+    value: header[1].split('=')[1].replace(/"/g, ''),
+    writable: true,
+    enumerable: true,
+    configurable: true
+  })
+  
   Object.defineProperty(input, 'data', {
     value: Buffer.from(part.part),
     writable: true,
