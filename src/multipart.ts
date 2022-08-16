@@ -28,7 +28,7 @@ enum ParsingState {
   INIT,
   READING_HEADERS,
   READING_DATA,
-  READING_PART_SEPARATOR,
+  READING_PART_SEPARATOR
 }
 
 export function parse(multipartBodyBuffer: Buffer, boundary: string): Input[] {
@@ -148,7 +148,7 @@ export function DemoData(): { body: Buffer; boundary: string } {
   body += '------WebKitFormBoundaryvef1fLxmoUdYZWXp--\r\n'
   return {
     body: Buffer.from(body),
-    boundary: '----WebKitFormBoundaryvef1fLxmoUdYZWXp',
+    boundary: '----WebKitFormBoundaryvef1fLxmoUdYZWXp'
   }
 }
 
@@ -169,7 +169,7 @@ function process(part: Part): Input {
       value: b,
       writable: true,
       enumerable: true,
-      configurable: true,
+      configurable: true
     })
     return o
   }
@@ -199,7 +199,7 @@ function process(part: Part): Input {
     value: Buffer.from(part.part),
     writable: true,
     enumerable: true,
-    configurable: true,
+    configurable: true
   })
   return input as Input
 }
