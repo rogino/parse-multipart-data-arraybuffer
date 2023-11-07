@@ -2,9 +2,9 @@
   "name": "parse-multipart-data",
   "version": "0.0.0-development",
   "description":
-    "A javascript/nodejs multipart/form-data parser which operates on raw data.",
+    "A JavaScript/TypeScript multipart/form-data parser which operates on native JS ArrayBuffer",
   "main": "dist/multipart.js",
-  "author": "Ignacio Mazzara (nachomazzara@gmail.com)",
+  "author": "Rio Ogino",
   "license": "MIT",
   "scripts": {
     "prebuild": "rm -rf dist",
@@ -22,13 +22,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nachomazzara/parse-multipart-data.git"
+    "url": "https://github.com/rogino/parse-multipart-data-arraybuffer.git"
   },
   "keywords": ["multipart/form-data", "form", "fileuploader"],
   "bugs": {
-    "url": "https://github.com/nachomazzara/parse-multipart-data/issues"
+    "url": "https://github.com/rogino/parse-multipart-data-arraybuffer/issues"
   },
-  "homepage": "https://github.com/nachomazzara/parse-multipart-data#readme",
+  "homepage": "https://github.com/rogino/parse-multipart-data-arraybuffer#readme",
   "dependencies": {
   },
   "devDependencies": {

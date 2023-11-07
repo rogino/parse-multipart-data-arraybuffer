@@ -1,15 +1,24 @@
 # parse-multipart-data
 
-A Typescript lib multipart/form-data parser which operates on raw data.
-Forked from [freesoftwarefactory/parse-multipart](https://github.com/freesoftwarefactory/parse-multipart)
+A Typescript lib multipart/form-data parser which operates on native JS ArrayBuffers.
+
+Forked from [nachomazzara/parse-multipart-data](https://github.com/nachomazzara/parse-multipart-data)\[\*\], which operates on Node.js `Buffer`s instead of JavaScript's native `ArrayBuffer`.
+
+This version should also have better performance as it does not copy the data, but rather returns `Uint8Array` views into the original `ArrayBuffer`.
+
+\[\*\] which in turn is a fork of [freesoftwarefactory/parse-multipart](https://github.com/freesoftwarefactory/parse-multipart)
+
 
 # Background
 
 Sometimes you only have access to the raw multipart payload and it needs to be
-parsed in order to extract the files or data contained on it. As an example:
-the Amazon AWS ApiGateway, which will operate as a facade between the http
-client and your component (the one written by you designed to extract the
-uploaded files or data).
+parsed in order to extract the files or data contained on it. As an example,
+if you have a Cloudflare Worker which is parsing a `multipart/form-data` POST
+request, the request is provided as either a `ReadableStream` or a promise that
+returns an `ArrayBuffer` - this library can operate on the latter.
+
+Note that this means that the full contents of the body must be received by the
+server and be loaded into memory.
 
 The raw payload formatted as multipart/form-data will looks like this one:
 
@@ -69,8 +78,8 @@ const parts = multipart.parse(body,boundary);
 
 for (let i = 0; i < parts.length; i++) {
   const part = parts[i];
-  // will be: { filename: 'A.txt', type: 'text/plain', data: <Buffer 41 41 41 41 42 42 42 42> }
+  // will be: { filename: 'A.txt', type: 'text/plain', data: <ArrayBuffer 41 41 41 41 42 42 42 42> }
 }
 ```
 
-The returned data is a `part` array with properties: `filename`, `type` and `data`. `data` is type of [Buffer](https://nodejs.org/api/buffer.html).
+The returned data is a `part` array with properties: `filename`, `type` and `data`. `data` is type of `Uint8Array`, which is backed by the original `ArrayBuffer` that was provided as input.
