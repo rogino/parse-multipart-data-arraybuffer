@@ -2,26 +2,26 @@
  * Multipart Parser (Finite State Machine)
  * usage:
  * const multipart = require('./multipart.js');
- * const body = multipart.DemoData(); 							   // raw body
- * const body = Buffer.from(event['body-json'].toString(),'base64'); // AWS case
+ * const body = multipart.DemoData(); // raw body
  * const boundary = multipart.getBoundary(event.params.header['content-type']);
  * const parts = multipart.Parse(body,boundary);
  * each part is:
- * { filename: 'A.txt', type: 'text/plain', data: <Buffer 41 41 41 41 42 42 42 42> }
- *  or { name: 'key', data: <Buffer 41 41 41 41 42 42 42 42> }
+ * { filename: 'A.txt', type: 'text/plain', data: <Uint8Array 41 41 41 41 42 42 42 42> }
+ *  or { name: 'key', data: <Uint8Array 41 41 41 41 42 42 42 42> }
+ * The data array references the original ArrayBuffer: it is not a copy of the data
  */
 
 type Part = {
   contentDispositionHeader: string
   contentTypeHeader: string
-  part: number[]
+  part: Uint8Array
 }
 
 type Input = {
   filename?: string
   name?: string
   type: string
-  data: Buffer
+  data: Uint8Array
 }
 
 enum ParsingState {
@@ -31,35 +31,55 @@ enum ParsingState {
   READING_PART_SEPARATOR
 }
 
-export function parse(multipartBodyBuffer: Buffer, boundary: string): Input[] {
-  let lastline = ''
+export function parse(multipartBodyBuffer: ArrayBuffer, boundary: string): Input[] {
   let contentDispositionHeader = ''
   let contentTypeHeader = ''
   let state: ParsingState = ParsingState.INIT
-  let buffer: number[] = []
   const allParts: Input[] = []
 
   let currentPartHeaders: string[] = []
 
-  for (let i = 0; i < multipartBodyBuffer.length; i++) {
-    const oneByte: number = multipartBodyBuffer[i]
-    const prevByte: number | null = i > 0 ? multipartBodyBuffer[i - 1] : null
+  let textDecoder = new TextDecoder()
+  let uint8Buffer = new Uint8Array(multipartBodyBuffer)
+
+  // inclusive
+  let bufferRange: { start: number, end: number } = { start: 0, end: 0 }
+  let lastlineRange: { start: number, end: number } | undefined
+
+  const lastlineLength = (): number|undefined => {
+    if (lastlineRange == undefined) return undefined
+      return lastlineRange.end - lastlineRange.start + 1
+  }
+  const lastline = (): string|undefined => {
+    if (lastlineRange == undefined) return undefined
+    let subarray = uint8Buffer.subarray(lastlineRange.start, lastlineRange.end + 1)
+    return textDecoder.decode(subarray)
+  }
+
+  for (let i = 0; i < uint8Buffer.length; i++) {
+    const oneByte: number = uint8Buffer[i]
+    const prevByte: number | null = i > 0 ? uint8Buffer[i - 1] : null
     // 0x0a => \n
     // 0x0d => \r
     const newLineDetected: boolean = oneByte === 0x0a && prevByte === 0x0d
     const newLineChar: boolean = oneByte === 0x0a || oneByte === 0x0d
 
-    if (!newLineChar) lastline += String.fromCharCode(oneByte)
+    if (!newLineChar) lastlineRange = {
+      start: lastlineRange?.start ?? i,
+      end: i
+    }
+
     if (ParsingState.INIT === state && newLineDetected) {
       // searching for boundary
-      if ('--' + boundary === lastline) {
+      console.log(lastlineLength(), boundary.length + 2)
+      if (lastlineLength() == boundary.length + 2 && lastline() == '--' + boundary) {
         state = ParsingState.READING_HEADERS // found boundary. start reading headers
       }
-      lastline = ''
+      lastlineRange = undefined
     } else if (ParsingState.READING_HEADERS === state && newLineDetected) {
       // parsing headers. Headers are separated by an empty line from the content. Stop reading headers when the line is empty
-      if (lastline.length) {
-        currentPartHeaders.push(lastline)
+      if (lastlineRange != undefined) {
+        currentPartHeaders.push(lastline()!)
       } else {
         // found empty line. search for the headers we want and set the values
         for (const h of currentPartHeaders) {
@@ -70,32 +90,26 @@ export function parse(multipartBodyBuffer: Buffer, boundary: string): Input[] {
           }
         }
         state = ParsingState.READING_DATA
-        buffer = []
+        bufferRange = { start: i + 1, end: i + 1 }
       }
-      lastline = ''
+      lastlineRange = undefined
     } else if (ParsingState.READING_DATA === state) {
-      // parsing data
-      if (lastline.length > boundary.length + 4) {
-        lastline = '' // mem save
-      }
-      if ('--' + boundary === lastline) {
-        const j = buffer.length - lastline.length
-        const part = buffer.slice(0, j - 1)
-
+      if (lastlineLength() == boundary.length + 2 && lastline() == '--' + boundary) {
+        let part = uint8Buffer.subarray(bufferRange.start, bufferRange.end - lastlineLength()!)
         allParts.push(
           process({ contentDispositionHeader, contentTypeHeader, part })
         )
-        buffer = []
+        bufferRange = { start: i, end: i }
         currentPartHeaders = []
-        lastline = ''
+        lastlineRange = undefined
         state = ParsingState.READING_PART_SEPARATOR
         contentDispositionHeader = ''
         contentTypeHeader = ''
       } else {
-        buffer.push(oneByte)
+        bufferRange.end = i
       }
       if (newLineDetected) {
-        lastline = ''
+        lastlineRange = undefined
       }
     } else if (ParsingState.READING_PART_SEPARATOR === state) {
       if (newLineDetected) {
@@ -123,7 +137,8 @@ export function getBoundary(header: string): string {
   return ''
 }
 
-export function DemoData(): { body: Buffer; boundary: string } {
+
+export function DemoData(): { body: ArrayBuffer; boundary: string } {
   let body = 'trash1\r\n'
   body += '------WebKitFormBoundaryvef1fLxmoUdYZWXp\r\n'
   body += 'Content-Type: text/plain\r\n'
@@ -146,8 +161,11 @@ export function DemoData(): { body: Buffer; boundary: string } {
   body += '\r\n'
   body += 'value1\r\n'
   body += '------WebKitFormBoundaryvef1fLxmoUdYZWXp--\r\n'
+
+  let textEncoder = new TextEncoder()
+  let buffer = textEncoder.encode(body)
   return {
-    body: Buffer.from(body),
+    body: buffer.buffer,
     boundary: '----WebKitFormBoundaryvef1fLxmoUdYZWXp'
   }
 }
@@ -158,7 +176,7 @@ function process(part: Part): Input {
   // info: 'Content-Type: text/plain',
   // part: 'AAAABBBB' }
   // into this one:
-  // { filename: 'A.txt', type: 'text/plain', data: <Buffer 41 41 41 41 42 42 42 42> }
+  // { filename: 'A.txt', type: 'text/plain', data: <Uint8Array 41 41 41 41 42 42 42 42> }
   const obj = function (str: string) {
     const k = str.split('=')
     const a = k[0].trim()
@@ -196,10 +214,11 @@ function process(part: Part): Input {
   })
 
   Object.defineProperty(input, 'data', {
-    value: Buffer.from(part.part),
+    value: part.part,
     writable: true,
     enumerable: true,
     configurable: true
   })
   return input as Input
 }
+

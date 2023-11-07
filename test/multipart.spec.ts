@@ -3,21 +3,22 @@ import * as chai from 'chai'
 import { parse, DemoData, getBoundary } from '../src/multipart'
 
 const expect = chai.expect
+const textEncoder = new TextEncoder()
 
 const expected = [
   {
     name: 'uploads[]',
     filename: 'A.txt',
     type: 'text/plain',
-    data: Buffer.from('@11X111Y\r\n111Z\rCCCC\nCCCC\r\nCCCCC@\r\n')
+    data: textEncoder.encode('@11X111Y\r\n111Z\rCCCC\nCCCC\r\nCCCCC@\r\n')
   },
   {
     name: 'uploads[]',
     filename: 'B.txt',
     type: 'text/plain',
-    data: Buffer.from('@22X222Y\r\n222Z\r222W\n2220\r\n666@')
+    data: textEncoder.encode('@22X222Y\r\n222Z\r222W\n2220\r\n666@')
   },
-  { name: 'input1', data: Buffer.from('value1') }
+  { name: 'input1', data: new Uint8Array(Buffer.from('value1')) }
 ]
 describe('Multipart', function() {
   it('should parse multipart', function() {
@@ -32,7 +33,7 @@ describe('Multipart', function() {
       expect(data.filename).to.be.equal(part.filename)
       expect(data.name).to.be.equal(part.name)
       expect(data.type).to.be.equal(part.type)
-      expect(data.data.toString()).to.be.equal(part.data.toString())
+      expect(Array.from(data.data)).to.have.same.members(Array.from(part.data))
     }
   })
 
@@ -69,8 +70,9 @@ describe('Multipart', function() {
 
   it('should not parse if multipart is not correct', function() {
     const { boundary } = DemoData()
-    const parts = parse(Buffer.from('hellow world'), boundary)
+    const parts = parse(textEncoder.encode('hellow world'), boundary)
 
     expect(parts.length).to.be.equal(0)
   })
 })
+
